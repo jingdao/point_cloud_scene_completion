@@ -1,3 +1,4 @@
+import numpy
 
 def loadPLY(filename):
 	vertices = []
@@ -20,7 +21,7 @@ def loadPLY(filename):
 		l = f.readline()
 		faces.append([int(j) for j in l.split()[1:4]])
 	f.close()
-	return vertices,faces
+	return numpy.array(vertices),numpy.array(vertices)
 
 def savePLY(filename, points):
 	f = open(filename,'w')
