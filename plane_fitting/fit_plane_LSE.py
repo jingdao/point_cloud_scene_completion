@@ -28,52 +28,50 @@ def fit_plane_LSE_RANSAC(points, iters=100, inlier_thresh=0.05):
     # make into homogeneous coordinates
     color = points[:,3:]
     p = np.hstack((points[:,:3], np.ones((points.shape[0],1))))
+    fitted = np.zeros((0,points.shape[1]))
 
-    max_inlier_num = -1
-    max_inlier_list = None
-    
-    N = points.shape[0]
-    assert N >= 3
+    for _ in range(100):
+        if points.shape[0] < 500:
+            break
 
-    for i in range(iters):
-        chose_id = np.random.choice(N, 3, replace=False)
-        chose_points = p[chose_id, :]
-        tmp_plane = fit_plane_LSE(chose_points)
+        max_inlier_num = -1
+        max_inlier_list = None
         
-        dists = get_point_dist(p, tmp_plane)
-        tmp_inlier_list = np.where(dists < inlier_thresh)[0]
-        tmp_inliers = p[tmp_inlier_list, :]
-        num_inliers = tmp_inliers.shape[0]
-        if num_inliers > max_inlier_num:
-            max_inlier_num = num_inliers
-            max_inlier_list = tmp_inlier_list
-    #print('max_in_list: ', max_inlier_list)
-        
-        #print('iter %d, %d inliers' % (i, max_inlier_num))
+        N = points.shape[0]
+        assert N >= 3
 
-    final_points = p[max_inlier_list, :]
-    plane = fit_plane_LSE(final_points)
-    #print(final_points.shape)
-    #color[:,1:] = np.zeros((color.shape[0],2))
-    c = np.zeros((final_points.shape[0],3))
-    c[:,0]+=225
-    #print(c.shape)
-    sav = np.hstack((final_points[:,:3],c))
-    name = 'wall_fit' + str(N) + '.ply'
-    util.savePLY(name,sav)
-    #print(final_points.shape)
-    
-    fit_variance = np.var(get_point_dist(final_points, plane))
-    print('RANSAC fit variance: %f' % fit_variance)
+        for i in range(iters):
+            chose_id = np.random.choice(N, 3, replace=False)
+            chose_points = p[chose_id, :]
+            tmp_plane = fit_plane_LSE(chose_points)
+            
+            dists = get_point_dist(p, tmp_plane)
+            tmp_inlier_list = np.where(dists < inlier_thresh)[0]
+            tmp_inliers = p[tmp_inlier_list, :]
+            num_inliers = tmp_inliers.shape[0]
+            if num_inliers > max_inlier_num:
+                max_inlier_num = num_inliers
+                max_inlier_list = tmp_inlier_list
 
-    dists = get_point_dist(p, plane)
+        final_points = p[max_inlier_list, :]
+        plane = fit_plane_LSE(final_points)
+        # assign random color to segmented plane
+        c = np.ones((final_points.shape[0],3)) * np.random.randint(256, size=(1,3))
+        sav = np.hstack((final_points[:,:3],c))
+        fitted = np.concatenate((fitted,sav))        
+        fit_variance = np.var(get_point_dist(final_points, plane))
+        print('RANSAC fit variance: %f' % fit_variance)
 
-    select_thresh = inlier_thresh * 1
+        dists = get_point_dist(p, plane)
 
-    inlier_list = np.where(dists < select_thresh)[0]
+        select_thresh = inlier_thresh * 1
 
-    # remove fitted points from original point cloud
-    points = np.delete(points, max_inlier_list, 0)
+        inlier_list = np.where(dists < select_thresh)[0]
+
+        # remove fitted points from original point cloud
+        points = np.delete(points, max_inlier_list, 0)
+
+    util.savePLY('plane_fitted.ply', fitted)
     return points
 
 def main():
