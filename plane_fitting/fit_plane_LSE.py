@@ -3,6 +3,7 @@ import numpy as np
 import numpy.linalg as la
 import util
 from svd_solve import svd, svd_solve
+from hole_filling import fill_holes
 
 def fit_plane_LSE(points):
     # points: Nx4 homogeneous 3d points
@@ -56,11 +57,19 @@ def fit_plane_LSE_RANSAC(points, iters=100, inlier_thresh=0.05):
         final_points = p[max_inlier_list, :]
         plane = fit_plane_LSE(final_points)
         # assign random color to segmented plane
-        c = np.ones((final_points.shape[0],3)) * np.random.randint(256, size=(1,3))
+        #c = np.ones((final_points.shape[0],3)) * np.random.randint(256, size=(1,3))
+        c = points[max_inlier_list, 3:]
         sav = np.hstack((final_points[:,:3],c))
-        fitted = np.concatenate((fitted,sav))        
+        # set color as mean of plane color
+        color = np.mean(c,0)
+        # points to be filled
+        hole = fill_holes(sav)
+        # add color to hole points
+        hole = np.hstack((hole, np.ones(hole.shape)*color))
+        # add to already fitted point cloud
+        fitted = np.concatenate((fitted,sav,hole))        
         fit_variance = np.var(get_point_dist(final_points, plane))
-        print('RANSAC fit variance: %f' % fit_variance)
+        #print('RANSAC fit variance: %f' % fit_variance)
 
         dists = get_point_dist(p, plane)
 
@@ -70,6 +79,7 @@ def fit_plane_LSE_RANSAC(points, iters=100, inlier_thresh=0.05):
 
         # remove fitted points from original point cloud
         points = np.delete(points, max_inlier_list, 0)
+        p = np.delete(p, max_inlier_list, 0)
 
     util.savePLY('plane_fitted.ply', fitted)
     return points
