@@ -277,8 +277,8 @@ def triangles_to_holes(points, tri_simplices, big_triangles,
     return holes
 
 
-def fill_holes(points, max_circumradius=0.2, max_ratio_radius_area=0.02,
-               distance=0.01, percentile=50, normals_z=None, min_norm_z=0,
+def fill_holes(points, max_circumradius=0.4, max_ratio_radius_area=0.2,
+               distance=0.4, percentile=50, normals_z=None, min_norm_z=0,
                bounding_shape=None, height_clustering=False, eps=0.1,
                suppress_qhull_errors=False):
     """
@@ -388,14 +388,12 @@ def fill_holes(points, max_circumradius=0.2, max_ratio_radius_area=0.02,
 
         return synthetic_points
     else:
-        print('empty')
         return np.empty((0, 3), dtype=np.float64)
 
 def main():
     print('start!')
     filename = sys.argv[1]
     v,f = util.loadPLY(filename)
-    v = np.array(v)
     asa = fill_holes(v)
     print(asa)
     print('finished!')
