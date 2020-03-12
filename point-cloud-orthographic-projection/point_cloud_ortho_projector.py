@@ -18,6 +18,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
+from load_data import PCDDataLoader
 
 class PointCloudOrthoProjector():
 
@@ -160,46 +161,51 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
-    bb1 = bounding_box.AABB(center=[0,0,0], half_xyz=[4,4,4])
-    print(bb1.center)
+    # bb1 = bounding_box.AABB(center=[0,0,0], half_xyz=[4,4,4])
+    # print(bb1.center)
     
-    maya_camera = cameras.MayaCamera()
-    pc_visualizer = DepthMapVisualizaer(maya_camera, skip=1, near=0, far=4)
-    # pc_visualizer.show_pc_from_depth_map_file('./sample_data/test/1/images/depthRender/Cam1/mayaProject.000004.png', bounding_box=bb1)
-    pc_visualizer.show_pc_from_depth_map_file('./zx_resized.png', bounding_box=bb1)
+    # maya_camera = cameras.MayaCamera()
+    # pc_visualizer = DepthMapVisualizaer(maya_camera, skip=1, near=0, far=4)
+    # # pc_visualizer.show_pc_from_depth_map_file('./sample_data/test/1/images/depthRender/Cam1/mayaProject.000004.png', bounding_box=bb1)
+    # pc_visualizer.show_pc_from_depth_map_file('./zx_resized.png', bounding_box=bb1)
 
-    test_projector = PointCloudOrthoProjector(density=100, image_size=(252, 252), pc_visualizer=pc_visualizer)
-    test_depth_map = test_projector.pc_visualizer.loader.load_depth_map_from_file('./zx_resized.png')
+    # test_projector = PointCloudOrthoProjector(density=100, image_size=(252, 252), pc_visualizer=pc_visualizer)
+    # test_depth_map = test_projector.pc_visualizer.loader.load_depth_map_from_file('./zx_resized.png')
 
-    plt.figure()
-    plt.imshow(test_depth_map)
-    plt.show()
-    print(1)
+    # plt.figure()
+    # plt.imshow(test_depth_map)
+    # plt.show()
+    # print(1)
 
-    test_pc = test_projector.pc_visualizer.generate_pc(test_depth_map, bb1)
-    test_projector.pc_visualizer.show_pc(test_pc)
-    print(2)
+    # test_pc = test_projector.pc_visualizer.generate_pc(test_depth_map, bb1)
+    # test_projector.pc_visualizer.show_pc(test_pc)
+    # print(2)
 
-    final_xy_image, final_yz_image, final_zx_image = test_projector.sample_image_w_pyramid(test_pc, bb1)
-    test_projector.show_sampled_image(final_xy_image,'1')
-    test_projector.show_sampled_image(final_yz_image,'2')
-    test_projector.show_sampled_image(final_zx_image,'3')
+    # final_xy_image, final_yz_image, final_zx_image = test_projector.sample_image_w_pyramid(test_pc, bb1)
+    # test_projector.show_sampled_image(final_xy_image,'1')
+    # test_projector.show_sampled_image(final_yz_image,'2')
+    # test_projector.show_sampled_image(final_zx_image,'3')
 
+    ### point cloud to 2D projection ###
+    # load pcd point cloud
+    test_pc = PCDDataLoader().load_pc_from_pcd('./pcd_images/mason_input.pcd')
+
+    #flip z axis
+    test_pc[:,2] = -test_pc[:,2]
+    print('loaded point cloud',test_pc.shape)
+    min_xyz = test_pc.min(axis=0)
+    max_xyz = test_pc.max(axis=0)
+    center = 0.5 * (min_xyz + max_xyz)
+    half_xyz = 0.5 * (max_xyz - min_xyz) + 0.5
+    print('center',center)
+    print('half_xyz',half_xyz)
     # bb2 = bounding_box.AABB(center=[0,0,0], half_xyz=[0.2, 0.2, 0.3])
-    bb2 = bounding_box.AABB(center=[0,0,0], half_xyz=[4,4,4])
+    bb2 = bounding_box.AABB(center=center, half_xyz=half_xyz)
     # bb2 = bounding_box.AABB(center=[21,-20,247], half_xyz=[20,20,20])
     pc_visualizer2 = PCDVisualizer(skip=1, near=0, far=4)
 
-    # test_projector2 = PointCloudOrthoProjector(density=50, image_size=(252, 252), pc_visualizer=pc_visualizer2)
-    test_projector2 = PointCloudOrthoProjector(density=100, image_size=(252, 252), pc_visualizer=pc_visualizer2)
-    print('loading pcd point cloud!')
-    # test_pc = test_projector2.pc_visualizer.loader.load_pc_from_pcd('./sample_data/bunny.pcd')
-    # test_pc = test_projector2.pc_visualizer.loader.load_pc_from_pcd('./0.pcd')
-    test_pc = test_projector2.pc_visualizer.loader.load_pc_from_pcd('./pcd_images/wall_with_hole.pcd')
-    # test_pc = test_projector2.pc_visualizer.loader.load_pc_from_pcd('./pettit_sub.pcd')
+    test_projector2 = PointCloudOrthoProjector(density=80, image_size=(252, 252), pc_visualizer=pc_visualizer2)
 
-    test_pc = test_projector2.pc_visualizer.generate_pc(test_pc, bb2)
-    test_projector2.pc_visualizer.show_pc(test_pc)
     final_xy_image, final_yz_image, final_zx_image = test_projector2.sample_image_w_pyramid(test_pc, bb2)
     test_projector2.show_sampled_image(final_xy_image, 'xy')
     test_projector2.show_sampled_image(final_yz_image, 'yz')
