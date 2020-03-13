@@ -39,8 +39,10 @@ print('predicted_points', predicted_points.shape, len(predicted_voxels), 'voxels
 common_voxels = set(ground_truth_voxels.keys()).intersection(set(predicted_voxels.keys()))
 voxel_recall = 1.0 * len(common_voxels) / len(ground_truth_voxels) if len(common_voxels)>0 else 0
 voxel_precision = 1.0 * len(common_voxels) / len(predicted_voxels) if len(common_voxels)>0 else 0
+F1_score = 2*voxel_precision*voxel_recall/(voxel_precision + voxel_recall)
 print('voxel_precision', voxel_precision)
 print('voxel_recall', voxel_recall)
+print('F1_score', F1_score)
 
 position_rmse = 0
 color_rmse = 0
