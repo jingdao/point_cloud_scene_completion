@@ -19,6 +19,11 @@ import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
 from load_data import PCDDataLoader
+import sys
+sys.path.append("..")
+from util import loadPLY, savePLY
+import scipy.ndimage
+import scipy.signal
 
 class PointCloudOrthoProjector():
 
@@ -34,24 +39,24 @@ class PointCloudOrthoProjector():
     # def project_one_point(self, point, film):
     #     pass
 
-    def show_sampled_image(self, sampled_image, name):
-        sampled_image = sampled_image.copy()
-        sampled_image = self.apply_median_filter(sampled_image)
-        print(sampled_image.shape)
-        im = Image.fromarray(sampled_image)
-        im.save(name+".png")
+    def show_sampled_image(self, depth_image, rgb_image, name):
+        depth_image_filtered = scipy.signal.medfilt2d(depth_image, 5)
+        rgb_image_filtered = np.zeros(rgb_image.shape, dtype=np.uint8)
+        rgb_image_filtered[:,:,0] = scipy.signal.medfilt2d(rgb_image[:,:,0], 5).astype(np.uint8)
+        rgb_image_filtered[:,:,1] = scipy.signal.medfilt2d(rgb_image[:,:,1], 5).astype(np.uint8)
+        rgb_image_filtered[:,:,2] = scipy.signal.medfilt2d(rgb_image[:,:,2], 5).astype(np.uint8)
+        im = Image.fromarray(rgb_image_filtered)
+        im.save(name+"_rgb.png")
+        np.save(name+"_depth.npy", depth_image_filtered)
         plt.figure()
-        plt.imshow(sampled_image, cmap='hot', interpolation='nearest')
+        plt.subplot(1,2,1)
+        plt.imshow(depth_image_filtered, cmap='hot', interpolation='nearest')
         plt.colorbar()
+        plt.title('depth image')
+        plt.subplot(1,2,2)
+        plt.imshow(rgb_image_filtered)
+        plt.title('rgb image')
         plt.show()
-
-    # def show_sampled_image(self, sampled_image):
-    #     sampled_image = sampled_image.copy()
-    #     sampled_image = self.apply_median_filter(sampled_image)
-    #     plt.figure()
-    #     plt.imshow(sampled_image, cmap='hot', interpolation='nearest')
-    #     plt.colorbar()
-    #     plt.show()
 
     def apply_median_filter(self, view_image):
         #normalized value to 0 - 255
@@ -67,35 +72,29 @@ class PointCloudOrthoProjector():
 
     def sample_image_w_pyramid(self, pc, bounding_box):
         #multi-scale
-        xy_images = []
-        yz_images = []
-        zx_images = []
+        depth_images = []
+        rgb_images = []
         for i in range(self.num_scales):
             density = self.density / self.scale_factor**i
-            xy_image, yz_image, zx_image = self.sample_image(pc, bounding_box, density=density)
-            
-            xy_images.append(xy_image)
-            yz_images.append(yz_image)
-            zx_images.append(zx_image)
+            zx_depth_image, zx_rgb_image = self.sample_image(pc, bounding_box, density=density)
+            depth_images.append(zx_depth_image)
+            rgb_images.append(zx_rgb_image)
         
-        final_xy_image = np.ones(xy_images[0].shape)
-        final_yz_image = np.ones(yz_images[0].shape)
-        final_zx_image = np.ones(zx_images[0].shape)
-
+        D = bounding_box.half_xyz[1]
+        final_depth_image = np.ones(depth_images[0].shape) * D
+        final_rgb_image = np.zeros(rgb_images[0].shape, dtype=np.uint8)
         for i in range(self.num_scales):
-            c_xy_image = cv2.resize(xy_images[i], (final_xy_image.shape[1], final_xy_image.shape[0]), interpolation=cv2.INTER_NEAREST)
-            c_yz_image = cv2.resize(yz_images[i], (final_yz_image.shape[1], final_yz_image.shape[0]), interpolation=cv2.INTER_NEAREST)
-            c_zx_image = cv2.resize(zx_images[i], (final_zx_image.shape[1], final_zx_image.shape[0]), interpolation=cv2.INTER_NEAREST)
+            if i > 0:
+                rgb_image = scipy.misc.imresize(rgb_images[i], final_rgb_image.shape, interp='nearest')
+                depth_image = scipy.misc.imresize(depth_images[i], final_depth_image.shape, interp='nearest',mode='F')
+            else:
+                rgb_image = rgb_images[i]
+                depth_image = depth_images[i] 
+            id1, id2 = np.where((final_depth_image == D) & (depth_image < D))
+            final_rgb_image[id1, id2, :] = rgb_image[id1, id2, :]
+            final_depth_image[id1, id2] = depth_image[id1, id2]
 
-            index_pos_xy = np.where((final_xy_image == 1) & (c_xy_image != 1))
-            index_pos_yz = np.where((final_yz_image == 1) & (c_yz_image != 1))
-            index_pos_zx = np.where((final_zx_image == 1) & (c_zx_image != 1))
-
-            final_xy_image[index_pos_xy] = c_xy_image[index_pos_xy]
-            final_yz_image[index_pos_yz] = c_yz_image[index_pos_yz]
-            final_zx_image[index_pos_zx] = c_zx_image[index_pos_zx]
-
-        return final_xy_image, final_yz_image, final_zx_image
+        return final_depth_image, final_rgb_image
 
     def sample_image(self, pc, bounding_box, density=None):
         pc=pc.copy()
@@ -112,44 +111,29 @@ class PointCloudOrthoProjector():
             raise('unsupport bounding box type')
 
         #convert pc to normalized space
-        pc[:, :] -= bounding_box.center
+        pc[:, :3] -= bounding_box.center
         pc[:, 0] /= bounding_box.half_xyz[0]
-        pc[:, 1] /= bounding_box.half_xyz[1]
+        #do not normalize Y coordinate because we need to recover it later!
+#        pc[:, 1] /= bounding_box.half_xyz[1]
         pc[:, 2] /= bounding_box.half_xyz[2]
-
-        # self.pc_visualizer.show_pc(pc)
 
         #for every point, get its x,y, draw it on film
         sample_width = int(math.ceil(bounding_box.width * density)+1)
         sample_height = int(math.ceil(bounding_box.height * density)+1)
         sample_depth = int(math.ceil(bounding_box.depth * density)+1)
         
-        #sample from xy, yz, zx plane
-        # print('helght, ', sample_height)
-        # print('width, ', sample_width)
-        xy_image = np.ones((sample_height, sample_width))
-        yz_image = np.ones((sample_height, sample_depth))
-        zx_image = np.ones((sample_depth, sample_width))
+        #sample from zx plane
+        zx_depth_image = np.ones((sample_depth, sample_width)) * bounding_box.half_xyz[1]
+        zx_rgb_image = np.zeros((sample_depth, sample_width, 3), dtype=np.uint8)
         for point in pc:
-            # c_x = math.ceil((point[0] + bounding_box.half_xyz[0]) * density)
-            # c_y = math.ceil((point[1] + bounding_box.half_xyz[1]) * density)
-            # c_x = int(round(((point[0] + bounding_box.half_xyz[0]) * density)))
-            # c_y = int(round(((point[1] + bounding_box.half_xyz[1]) * density)))
-            # c_z = int(round(((point[2] + bounding_box.half_xyz[2]) * density)))
             c_x = int(round(((point[0] + 1.0) * density * bounding_box.half_xyz[0])))
             c_y = int(round(((point[1] + 1.0) * density * bounding_box.half_xyz[1])))
             c_z = int(round(((point[2] + 1.0) * density * bounding_box.half_xyz[2])))
-            if(point[2] < xy_image[c_y, c_x]): #nearest point
-                xy_image[c_y, c_x] = point[2]
-            if(point[0] < yz_image[c_y, c_z]): #nearest point
-                yz_image[c_y, c_z] = point[0]
-            if(point[1] < zx_image[c_z, c_x]): #nearest point
-                zx_image[c_z, c_x] = point[1]
-            # added point is the normalized depth value! (ex. for xy image, z value in the point is the depth)
+            if(point[1] < zx_depth_image[c_z, c_x]): #nearest point
+                zx_depth_image[c_z, c_x] = point[1]
+                zx_rgb_image[c_z, c_x] = point[3:6]
 
-        return xy_image, yz_image, zx_image
-
-
+        return zx_depth_image, zx_rgb_image
 
     def generate_ortho_projection(self, pc, bounding_box):
         #sample a image based on density
@@ -161,53 +145,78 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
-    # bb1 = bounding_box.AABB(center=[0,0,0], half_xyz=[4,4,4])
-    # print(bb1.center)
+    convert3Dto2D = True #True to convert 3D to 2D, False to convert 2D to 3D
+    test_filename = 'wall_with_hole'
+#    test_filename = 'mason_input'
+#    test_filename = 'pettit_input'
     
-    # maya_camera = cameras.MayaCamera()
-    # pc_visualizer = DepthMapVisualizaer(maya_camera, skip=1, near=0, far=4)
-    # # pc_visualizer.show_pc_from_depth_map_file('./sample_data/test/1/images/depthRender/Cam1/mayaProject.000004.png', bounding_box=bb1)
-    # pc_visualizer.show_pc_from_depth_map_file('./zx_resized.png', bounding_box=bb1)
+    if convert3Dto2D:
+        ### 3D point cloud to 2D projection ###
+        # load pcd point cloud
+        test_pc,_ = loadPLY('../%s.ply' % test_filename)
+        #flip z axis
+        test_pc[:,2] = -test_pc[:,2]
+        print('loaded point cloud',test_pc.shape)
+        
+        #calculate center and half_xyz
+        min_xyz = test_pc[:,:3].min(axis=0)
+        max_xyz = test_pc[:,:3].max(axis=0)
+        center = 0.5 * (min_xyz + max_xyz)
+        half_xyz = 0.5 * (max_xyz - min_xyz) + 0.5
+        density = 50.0
+        print('center',center)
+        print('half_xyz',half_xyz)
+        print('density',density)
+        #save parameters to text file
+        f = open('param_%s.txt'%test_filename, 'w')
+        f.write("%f %f %f %f %f %f %f\n"%(center[0], center[1], center[2], half_xyz[0], half_xyz[1], half_xyz[2], density))
+        f.close()
 
-    # test_projector = PointCloudOrthoProjector(density=100, image_size=(252, 252), pc_visualizer=pc_visualizer)
-    # test_depth_map = test_projector.pc_visualizer.loader.load_depth_map_from_file('./zx_resized.png')
+        bb2 = bounding_box.AABB(center=center, half_xyz=half_xyz)
+        pc_visualizer2 = PCDVisualizer(skip=1, near=0, far=4)
 
-    # plt.figure()
-    # plt.imshow(test_depth_map)
-    # plt.show()
-    # print(1)
+        #create a projector object
+        test_projector2 = PointCloudOrthoProjector(density=density, image_size=(252, 252), pc_visualizer=pc_visualizer2)
+        depth_image, rgb_image = test_projector2.sample_image_w_pyramid(test_pc, bb2)
+        #visualize and save the resulting 2D images
+        test_projector2.show_sampled_image(depth_image, rgb_image, test_filename)
 
-    # test_pc = test_projector.pc_visualizer.generate_pc(test_depth_map, bb1)
-    # test_projector.pc_visualizer.show_pc(test_pc)
-    # print(2)
+    else:
 
-    # final_xy_image, final_yz_image, final_zx_image = test_projector.sample_image_w_pyramid(test_pc, bb1)
-    # test_projector.show_sampled_image(final_xy_image,'1')
-    # test_projector.show_sampled_image(final_yz_image,'2')
-    # test_projector.show_sampled_image(final_zx_image,'3')
+        ### 2D projection to 3D point cloud###
 
-    ### point cloud to 2D projection ###
-    # load pcd point cloud
-    test_pc = PCDDataLoader().load_pc_from_pcd('./pcd_images/mason_input.pcd')
+        #read in depth image and RGB image
+        depth_image = np.load('%s_depth.npy' % test_filename)
+        rgb_image = scipy.misc.imread('%s_rgb.png' % test_filename)
+        print('depth_image', depth_image.shape)
+        print('rgb_image', rgb_image.shape)
 
-    #flip z axis
-    test_pc[:,2] = -test_pc[:,2]
-    print('loaded point cloud',test_pc.shape)
-    min_xyz = test_pc.min(axis=0)
-    max_xyz = test_pc.max(axis=0)
-    center = 0.5 * (min_xyz + max_xyz)
-    half_xyz = 0.5 * (max_xyz - min_xyz) + 0.5
-    print('center',center)
-    print('half_xyz',half_xyz)
-    # bb2 = bounding_box.AABB(center=[0,0,0], half_xyz=[0.2, 0.2, 0.3])
-    bb2 = bounding_box.AABB(center=center, half_xyz=half_xyz)
-    # bb2 = bounding_box.AABB(center=[21,-20,247], half_xyz=[20,20,20])
-    pc_visualizer2 = PCDVisualizer(skip=1, near=0, far=4)
+        #get parameters from text file
+        f = open('param_%s.txt'%test_filename, 'r')
+        l = [float(t) for t in f.readline().split()]
+        center = np.array([l[0], l[1], l[2]])
+        half_xyz = np.array([l[3], l[4], l[5]])
+        density = l[6]
+        f.close()
+        print('center',center)
+        print('half_xyz',half_xyz)
+        print('density',density)
+        bb1 = bounding_box.AABB(center=center, half_xyz=half_xyz)
 
-    test_projector2 = PointCloudOrthoProjector(density=80, image_size=(252, 252), pc_visualizer=pc_visualizer2)
+        #project image back to 3D point cloud
+        v,u = np.nonzero(rgb_image.mean(axis=2))
+        output_pc = np.zeros((len(u), 6))
+        for i in range(len(u)):
+            #X coordinate
+            output_pc[i, 0] = (u[i] / density / bb1.half_xyz[0] - 1.0) * bb1.half_xyz[0]
+            #Y coordinate
+            output_pc[i, 1] = depth_image[v[i], u[i]]
+            #Z coordinate
+            output_pc[i, 2] = (v[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
+            #RGB color
+            output_pc[i, 3:6] = rgb_image[v[i], u[i], :] 
+        output_pc[:,:3] += center
+        #flip z axis
+        output_pc[:,2] = -output_pc[:,2]
+        savePLY('%s_output.ply'%test_filename, output_pc)
 
-    final_xy_image, final_yz_image, final_zx_image = test_projector2.sample_image_w_pyramid(test_pc, bb2)
-    test_projector2.show_sampled_image(final_xy_image, 'xy')
-    test_projector2.show_sampled_image(final_yz_image, 'yz')
-    test_projector2.show_sampled_image(final_zx_image, 'zx')
-    print('end')
