@@ -111,7 +111,6 @@ class DepthMapVisualizaer(PointCloudVisualizer):
 
     def show_pc_from_depth_map_file(self, file_path, bounding_box=None):
         depth_map = self.loader.load_depth_map_from_file(file_path)
-        print('depth map shape: ',depth_map.shape)
         pc = self.generate_pc(depth_map, bounding_box=bounding_box)
         self.show_pc(pc)
 
@@ -126,17 +125,14 @@ class DepthMapVisualizaer(PointCloudVisualizer):
 
         pc[:, :, 0] = (pc[:, :, 0] - self.camera.cy) * pc[:, :, 2] / self.camera.fy
         pc[:, :, 1] = (pc[:, :, 1] - self.camera.cx) * pc[:, :, 2] / self.camera.fx
-        print('hello ', pc.shape)
         #reshape the orgnized pc to unorgnized pc
         pc = np.reshape(pc, (-1, 3))
-        print('reshaped ', pc.shape)
         #now 0 position is y, 1 position is x, switch 2 cols
         pc[:, 0], pc[:, 1] = pc[:, 1], pc[:, 0].copy()
 
         #clip pc using near and far
         index_pos = np.where((pc[: ,2] <= self.far) & (pc[: ,2] >= self.near))
         pc = pc[index_pos]
-        print('before bounding ', pc.shape)
         #crop pc using bounding box
         if bounding_box==None:
             pass

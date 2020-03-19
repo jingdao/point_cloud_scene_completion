@@ -132,4 +132,3 @@ if __name__ == '__main__':
     test_pc = loader2.load_pc_from_pcd('./0.pcd')
     # test_pc = loader2.load_pc_from_pcd('./wall_with_hole.pcd')
     test_pc = np.array(test_pc)
-    print(test_pc.shape) 

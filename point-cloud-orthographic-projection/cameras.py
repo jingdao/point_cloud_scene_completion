@@ -50,9 +50,10 @@ class MayaCamera(BaseCamera):
     '''
 
     def __init__(self):
-        BaseCamera.__init__(self, image_size=(424, 512),cx=256, cy=212, fx=368.096588, fy=368.096588)
-        # BaseCamera.__init__(self, image_size=(801,801),cx=256, cy=212, fx=368.096588, fy=368.096588)
-
+        # BaseCamera.__init__(self, image_size=(424, 512),cx=256, cy=212, fx=368.096588, fy=368.096588)
+        BaseCamera.__init__(self, image_size=(1805,2007),cx=902, cy=1003, fx=368.096588, fy=368.096588)
+        # BaseCamera.__init__(self, image_size=(601,601),cx=300, cy=300, fx=368.096588, fy=368.096588)
+        # BaseCamera.__init__(self, image_size=(708,2420),cx=354, cy=1210, fx=368.096588, fy=368.096588)
 
     def convert_png_to_depth_map(self, png_image):
         assert(png_image.shape == self.image_size)
