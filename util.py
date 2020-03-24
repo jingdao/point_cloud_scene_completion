@@ -23,7 +23,7 @@ def loadPLY(filename):
 	f.close()
 	return numpy.array(vertices),numpy.array(faces)
 
-def savePLY(filename, points):
+def savePLY(filename, points, faces=None):
 	f = open(filename,'w')
 	f.write("""ply
 format ascii 1.0
@@ -34,10 +34,20 @@ property float z
 property uchar r
 property uchar g
 property uchar b
-end_header
 """ % len(points))
+	if faces is None:
+		f.write("end_header\n")
+	else:
+		f.write("""
+element face %d
+property list uchar int vertex_index
+end_header
+""" % (len(faces)))
 	for p in points:
 		f.write("%f %f %f %d %d %d\n"%(p[0],p[1],p[2],p[3],p[4],p[5]))
+	if not faces is None:
+		for p in faces:
+			f.write("3 %d %d %d\n"%(p[0],p[1],p[2]))
 	f.close()
 	print('Saved to %s: (%d points)'%(filename, len(points)))
 
@@ -86,5 +96,5 @@ DATA ascii
 		rgb = (int(p[3]) << 16) | (int(p[4]) << 8) | int(p[5])
 		f.write("%f %f %f %d\n"%(p[0],p[1],p[2],rgb))
 	f.close()
-	print 'Saved %d points to %s' % (l,filename)
+	print('Saved %d points to %s' % (l,filename))
 
