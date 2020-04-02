@@ -24,6 +24,7 @@ sys.path.append("..")
 from util import loadPLY, savePLY
 import scipy.ndimage
 import scipy.signal
+from scipy.spatial.distance import cdist
 
 class PointCloudOrthoProjector():
 
@@ -40,11 +41,11 @@ class PointCloudOrthoProjector():
     #     pass
 
     def show_sampled_image(self, depth_image, rgb_image, name):
-        depth_image_filtered = scipy.signal.medfilt2d(depth_image, 5)
+        depth_image_filtered = scipy.signal.medfilt2d(depth_image, 3)
         rgb_image_filtered = np.zeros(rgb_image.shape, dtype=np.uint8)
-        rgb_image_filtered[:,:,0] = scipy.signal.medfilt2d(rgb_image[:,:,0], 5).astype(np.uint8)
-        rgb_image_filtered[:,:,1] = scipy.signal.medfilt2d(rgb_image[:,:,1], 5).astype(np.uint8)
-        rgb_image_filtered[:,:,2] = scipy.signal.medfilt2d(rgb_image[:,:,2], 5).astype(np.uint8)
+        rgb_image_filtered[:,:,0] = scipy.signal.medfilt2d(rgb_image[:,:,0], 3).astype(np.uint8)
+        rgb_image_filtered[:,:,1] = scipy.signal.medfilt2d(rgb_image[:,:,1], 3).astype(np.uint8)
+        rgb_image_filtered[:,:,2] = scipy.signal.medfilt2d(rgb_image[:,:,2], 3).astype(np.uint8)
         im = Image.fromarray(rgb_image_filtered)
         im.save(name+"_rgb.png")
         np.save(name+"_depth.npy", depth_image_filtered)
@@ -145,10 +146,10 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
-    convert3Dto2D = True #True to convert 3D to 2D, False to convert 2D to 3D
+    convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
     test_filename = 'wall_with_hole'
-#    test_filename = 'mason_input'
-#    test_filename = 'pettit_input'
+    # test_filename = 'mason_input'
+    # test_filename = 'pettit_input'
     
     if convert3Dto2D:
         ### 3D point cloud to 2D projection ###
@@ -163,7 +164,7 @@ if __name__ == '__main__':
         max_xyz = test_pc[:,:3].max(axis=0)
         center = 0.5 * (min_xyz + max_xyz)
         half_xyz = 0.5 * (max_xyz - min_xyz) + 0.5
-        density = 50.0
+        density = 60.0
         print('center',center)
         print('half_xyz',half_xyz)
         print('density',density)
@@ -188,6 +189,7 @@ if __name__ == '__main__':
         #read in depth image and RGB image
         depth_image = np.load('%s_depth.npy' % test_filename)
         rgb_image = scipy.misc.imread('%s_rgb.png' % test_filename)
+        filled_image = scipy.misc.imread('%s_filled.png' % test_filename)
         print('depth_image', depth_image.shape)
         print('rgb_image', rgb_image.shape)
 
@@ -205,16 +207,25 @@ if __name__ == '__main__':
 
         #project image back to 3D point cloud
         v,u = np.nonzero(rgb_image.mean(axis=2))
-        output_pc = np.zeros((len(u), 6))
-        for i in range(len(u)):
+        x = np.transpose((v,u)) # array of nonzero indices in rgb image
+        v_f,u_f = np.nonzero(filled_image.mean(axis=2))
+        output_pc = np.zeros((len(u_f), 6))
+        for i in range(len(u_f)):
             #X coordinate
-            output_pc[i, 0] = (u[i] / density / bb1.half_xyz[0] - 1.0) * bb1.half_xyz[0]
+            output_pc[i, 0] = (u_f[i] / density / bb1.half_xyz[0] - 1.0) * bb1.half_xyz[0]
             #Y coordinate
-            output_pc[i, 1] = depth_image[v[i], u[i]]
+            if (v_f[i] not in v) or (u_f[i] not in u):
+                a = np.array([v_f[i],u_f[i]])
+                q = np.argmin(cdist(a,x))
+                print(q)
+                min_v,min_u = x[q]
+                output_pc[i,1] = depth_image[min_v, min_u]
+            else:
+                output_pc[i, 1] = depth_image[v_f[i], u_f[i]]
             #Z coordinate
-            output_pc[i, 2] = (v[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
+            output_pc[i, 2] = (v_f[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
             #RGB color
-            output_pc[i, 3:6] = rgb_image[v[i], u[i], :] 
+            output_pc[i, 3:6] = filled_image[v_f[i], u_f[i], :] 
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
