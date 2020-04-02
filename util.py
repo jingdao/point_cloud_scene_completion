@@ -98,3 +98,19 @@ DATA ascii
 	f.close()
 	print('Saved %d points to %s' % (l,filename))
 
+def saveVoxels(filename, voxels, voxel_scale=1.0, offset=[0.0,0.0,0.0], cross_section=False):
+	V = []
+	for x in range(voxels.shape[0]):
+		for y in range(voxels.shape[1]):
+			for z in range(voxels.shape[2]):
+				if not cross_section or y==int(voxels.shape[1]/2):
+					if voxels[x,y,z] < 0: #unknown
+						V.append([x,y,z,255,0,0])
+					elif voxels[x,y,z] <= 1.0: #occupied
+						V.append([x,y,z,0,255,0])
+					else: #free space
+						V.append([x,y,z,0,0,255])
+	V = numpy.array(V, dtype=float)
+	V[:,:3] *= voxel_scale
+	V[:,:3] += numpy.array(offset)
+	savePLY(filename, V)
