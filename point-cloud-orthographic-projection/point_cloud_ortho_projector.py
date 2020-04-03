@@ -215,13 +215,12 @@ if __name__ == '__main__':
             output_pc[i, 0] = (u_f[i] / density / bb1.half_xyz[0] - 1.0) * bb1.half_xyz[0]
             #Y coordinate
             if (v_f[i] not in v) or (u_f[i] not in u):
-                a = np.array([v_f[i],u_f[i]])
-                q = np.argmin(cdist(a,x))
-                print(q)
+                a = np.array([[v_f[i],u_f[i]]])
+                q = np.argmin(cdist(a,x,'euclidean'))
                 min_v,min_u = x[q]
-                output_pc[i,1] = depth_image[min_v, min_u]
+                output_pc[i,1] = depth_image[v[min_v], u[min_u]]
             else:
-                output_pc[i, 1] = depth_image[v_f[i], u_f[i]]
+                output_pc[i,1] = depth_image[v_f[i], u_f[i]]
             #Z coordinate
             output_pc[i, 2] = (v_f[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
             #RGB color
@@ -229,5 +228,5 @@ if __name__ == '__main__':
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
-        savePLY('%s_output.ply'%test_filename, output_pc)
+        savePLY('%s_filled.ply'%test_filename, output_pc)
 
