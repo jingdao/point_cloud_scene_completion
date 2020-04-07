@@ -14,7 +14,7 @@ predicted_points, _ = loadPLY(sys.argv[2])
 ground_truth_points[:,3:6] /= 255.0
 predicted_points[:,3:6] /= 255.0
 
-#randomly shuffle points to that voxels can be sampled non-deterministically
+#randomly shuffle points so that voxels can be sampled non-deterministically
 numpy.random.shuffle(ground_truth_points)
 numpy.random.shuffle(predicted_points)
 
@@ -47,9 +47,10 @@ print('F1_score', F1_score)
 position_rmse = 0
 color_rmse = 0
 for k in common_voxels:
-    difference_squared = (ground_truth_voxels[k] - predicted_voxels[k])**2
+    difference_squared = (ground_truth_voxels[k][:6] - predicted_voxels[k][:6])**2
     position_rmse += difference_squared[:3].sum()
     color_rmse += difference_squared[3:6].sum()
+
 position_rmse = numpy.sqrt(position_rmse / (len(common_voxels)*3))
 color_rmse = numpy.sqrt(color_rmse / (len(common_voxels)*3))
 print('position_rmse', position_rmse)
