@@ -496,8 +496,8 @@ def save_images(fetches, step=None):
     for i, in_path in enumerate(fetches["paths"]):
         name, _ = os.path.splitext(os.path.basename(in_path.decode("utf8")))
         fileset = {"name": name, "step": step}
-#        for kind in ["inputs", "outputs", "targets"]:
-        for kind in ["outputs"]:
+        for kind in ["inputs", "outputs", "targets"]:
+#        for kind in ["outputs"]:
             filename = name + "-" + kind + ".png"
             if step is not None:
                 filename = "%08d-%s" % (step, filename)
