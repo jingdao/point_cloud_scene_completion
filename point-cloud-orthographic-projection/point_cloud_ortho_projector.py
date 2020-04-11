@@ -24,7 +24,7 @@ sys.path.append("..")
 from util import loadPLY, savePLY
 import scipy.ndimage
 import scipy.signal
-from scipy.spatial.distance import cdist
+import pyflann
 
 class PointCloudOrthoProjector():
 
@@ -115,7 +115,6 @@ class PointCloudOrthoProjector():
         pc[:, :3] -= bounding_box.center
         pc[:, 0] /= bounding_box.half_xyz[0]
         #do not normalize Y coordinate because we need to recover it later!
-#        pc[:, 1] /= bounding_box.half_xyz[1]
         pc[:, 2] /= bounding_box.half_xyz[2]
 
         #for every point, get its x,y, draw it on film
@@ -147,9 +146,9 @@ class PointCloudOrthoProjector():
 
 if __name__ == '__main__':
     convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
-    test_filename = 'wall_with_hole'
+    # test_filename = 'wall_with_hole'
     # test_filename = 'mason_input'
-    # test_filename = 'pettit_input'
+    test_filename = 'pettit_input'
     
     if convert3Dto2D:
         ### 3D point cloud to 2D projection ###
@@ -207,26 +206,31 @@ if __name__ == '__main__':
 
         #project image back to 3D point cloud
         v,u = np.nonzero(rgb_image.mean(axis=2))
-        x = np.transpose((v,u)) # array of nonzero indices in rgb image
-        v_f,u_f = np.nonzero(filled_image.mean(axis=2))
+        x = np.transpose((v,u)) # array of nonzero indices in rgb image (N,2)
+        v_f,u_f = np.nonzero(filled_image.mean(axis=2)>100)
         output_pc = np.zeros((len(u_f), 6))
+        flann = pyflann.FLANN()
+        pstack = np.empty((0,2),float)
+        idx = []
         for i in range(len(u_f)):
             #X coordinate
             output_pc[i, 0] = (u_f[i] / density / bb1.half_xyz[0] - 1.0) * bb1.half_xyz[0]
             #Y coordinate
-            if (v_f[i] not in v) or (u_f[i] not in u):
-                a = np.array([[v_f[i],u_f[i]]])
-                q = np.argmin(cdist(a,x,'euclidean'))
-                min_v,min_u = x[q]
-                output_pc[i,1] = depth_image[v[min_v], u[min_u]]
+            if np.all(rgb_image[v_f[i],u_f[i],:]) == 0:
+                idx.append(i)
+                pstack = np.vstack((pstack, np.array([v_f[i],u_f[i]])))
             else:
                 output_pc[i,1] = depth_image[v_f[i], u_f[i]]
             #Z coordinate
             output_pc[i, 2] = (v_f[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
             #RGB color
             output_pc[i, 3:6] = filled_image[v_f[i], u_f[i], :] 
+        q,_ = flann.nn(x.astype(np.int32), pstack.astype(np.int32), 1, algorithm='kdtree_simple')
+        for i in range(len(idx)):
+            min_v,min_u = x[q[i]]
+            output_pc[idx[i],1] = depth_image[v[min_v], u[min_u]]
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
-        savePLY('%s_filled.ply'%test_filename, output_pc)
+        savePLY('%s_output.ply'%test_filename, output_pc)
 
