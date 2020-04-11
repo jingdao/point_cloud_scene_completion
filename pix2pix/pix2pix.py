@@ -12,6 +12,7 @@ import random
 import collections
 import math
 import time
+import sys
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_dir", help="path to folder containing images")
@@ -43,6 +44,8 @@ parser.add_argument("--lr", type=float, default=0.0002, help="initial learning r
 parser.add_argument("--beta1", type=float, default=0.5, help="momentum term of adam")
 parser.add_argument("--l1_weight", type=float, default=100.0, help="weight on L1 term for generator gradient")
 parser.add_argument("--gan_weight", type=float, default=1.0, help="weight on GAN term for generator gradient")
+parser.add_argument("--adv_loss", action="store_true", help="use adversarial loss")
+parser.add_argument("--background_threshold", type=float, default=-0.0, help="threshold for a pixel to be considered background")
 
 # export options
 parser.add_argument("--output_filetype", default="png", choices=["png", "jpeg"])
@@ -52,7 +55,7 @@ EPS = 1e-12
 CROP_SIZE = 256
 
 Examples = collections.namedtuple("Examples", "paths, inputs, targets, count, steps_per_epoch")
-Model = collections.namedtuple("Model", "outputs, predict_real, predict_fake, discrim_loss, discrim_grads_and_vars, gen_loss_GAN, gen_loss_L1, gen_grads_and_vars, train")
+Model = collections.namedtuple("Model", "outputs, predict_real, predict_fake, discrim_loss, discrim_grads_and_vars, gen_loss_GAN, gen_loss_L1, gen_grads_and_vars, train, prc, rcl, L1")
 
 
 def preprocess(image):
@@ -460,12 +463,18 @@ def create_model(inputs, targets):
         discrim_grads_and_vars = discrim_optim.compute_gradients(discrim_loss, var_list=discrim_tvars)
         discrim_train = discrim_optim.apply_gradients(discrim_grads_and_vars)
 
-    with tf.name_scope("generator_train"):
-        with tf.control_dependencies([discrim_train]):
+    if a.adv_loss:
+        with tf.name_scope("generator_train"):
+            with tf.control_dependencies([discrim_train]):
+                gen_tvars = [var for var in tf.trainable_variables() if var.name.startswith("generator")]
+                gen_optim = tf.train.AdamOptimizer(a.lr, a.beta1)
+                gen_grads_and_vars = gen_optim.compute_gradients(gen_loss, var_list=gen_tvars)
+                gen_train = gen_optim.apply_gradients(gen_grads_and_vars)
+    else:
+        with tf.name_scope("generator_train"):
             gen_tvars = [var for var in tf.trainable_variables() if var.name.startswith("generator")]
             gen_optim = tf.train.AdamOptimizer(a.lr, a.beta1)
-            gen_grads_and_vars = gen_optim.compute_gradients(gen_loss, var_list=gen_tvars)
-#        gen_grads_and_vars = gen_optim.compute_gradients(gen_loss_L1, var_list=gen_tvars)
+            gen_grads_and_vars = gen_optim.compute_gradients(gen_loss_L1, var_list=gen_tvars)
             gen_train = gen_optim.apply_gradients(gen_grads_and_vars)
 
     ema = tf.train.ExponentialMovingAverage(decay=0.99)
@@ -473,6 +482,30 @@ def create_model(inputs, targets):
 
     global_step = tf.train.get_or_create_global_step()
     incr_global_step = tf.assign(global_step, global_step+1)
+
+    val_tp = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        tf.reduce_any(tf.math.greater(outputs, a.background_threshold), axis=3), 
+        tf.reduce_any(tf.math.greater(targets, a.background_threshold), axis=3)), 
+    tf.int32))
+    val_fp = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        tf.reduce_any(tf.math.greater(outputs, a.background_threshold), axis=3), 
+        tf.reduce_all(tf.math.less_equal(targets, a.background_threshold), axis=3)), 
+    tf.int32))
+    val_fn = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        tf.reduce_all(tf.math.less_equal(outputs, a.background_threshold), axis=3), 
+        tf.reduce_any(tf.math.greater(targets, a.background_threshold), axis=3)), 
+    tf.int32))
+    prc = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fp, tf.float32) + EPS)
+    rcl = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fn, tf.float32) + EPS)
+    L1 = tf.reduce_mean(tf.abs(targets - outputs))
+
+#    logits_reshaped = tf.reshape(logits_tf, (a.batch_size*CROP_SIZE*CROP_SIZE,2))
+#    labels_reshaped = tf.reshape(self.label_pl, [a.batch_size*CROP_SIZE*CROP_SIZE])
+#    pos_mask = tf.where(tf.cast(labels_reshaped, tf.bool))
+#    neg_mask = tf.where(tf.cast(1 - labels_reshaped, tf.bool))
+#    pos_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, pos_mask), labels=tf.gather_nd(labels_reshaped, pos_mask)))
+#    neg_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, neg_mask), labels=tf.gather_nd(labels_reshaped, neg_mask)))
+#    mask_loss = pos_loss + neg_loss
 
     return Model(
         predict_real=predict_real,
@@ -484,6 +517,9 @@ def create_model(inputs, targets):
         gen_grads_and_vars=gen_grads_and_vars,
         outputs=outputs,
         train=tf.group(update_losses, incr_global_step, gen_train),
+        prc=prc,
+        rcl=rcl,
+        L1=L1
     )
 
 
@@ -715,9 +751,9 @@ def main():
         print("parameter_count =", sess.run(parameter_count))
 
         if a.checkpoint is not None:
-            print("loading model from checkpoint")
             checkpoint = tf.train.latest_checkpoint(a.checkpoint)
             saver.restore(sess, checkpoint)
+            print("loaded model from checkpoint", checkpoint)
 
         max_steps = 2**32
         if a.max_epochs is not None:
@@ -728,13 +764,16 @@ def main():
         if a.mode == "test":
             # testing
             # at most, process the test data once
+            display_fetches["prc"] = model.prc
+            display_fetches["rcl"] = model.rcl
+            display_fetches["L1"] = model.L1
             start = time.time()
             max_steps = min(examples.steps_per_epoch, max_steps)
             for step in range(max_steps):
                 results = sess.run(display_fetches)
                 filesets = save_images(results)
                 for i, f in enumerate(filesets):
-                    print("evaluated image", f["name"])
+                    print("evaluated image %s %.3f/%.3f %.3f" %(f["name"], results['prc'], results['rcl'], results['L1']))
 #                index_path = append_index(filesets)
 #            print("wrote index at", index_path)
             print("rate", (time.time() - start) / max_steps)
@@ -761,6 +800,8 @@ def main():
                     fetches["discrim_loss"] = model.discrim_loss
                     fetches["gen_loss_GAN"] = model.gen_loss_GAN
                     fetches["gen_loss_L1"] = model.gen_loss_L1
+                    fetches["prc"] = model.prc
+                    fetches["rcl"] = model.rcl
 
                 if should(a.summary_freq):
                     fetches["summary"] = sv.summary_op
@@ -793,6 +834,8 @@ def main():
                     print("discrim_loss", results["discrim_loss"])
                     print("gen_loss_GAN", results["gen_loss_GAN"])
                     print("gen_loss_L1", results["gen_loss_L1"])
+                    print("prc", results["prc"])
+                    print("rcl", results["rcl"])
 
                 if should(a.save_freq):
                     print("saving model")
