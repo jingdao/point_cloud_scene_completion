@@ -147,8 +147,8 @@ class PointCloudOrthoProjector():
 if __name__ == '__main__':
     convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
     # test_filename = 'wall_with_hole'
-    # test_filename = 'mason_input'
-    test_filename = 'pettit_input'
+    test_filename = 'mason_input'
+    # test_filename = 'pettit_input'
     
     if convert3Dto2D:
         ### 3D point cloud to 2D projection ###
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         max_xyz = test_pc[:,:3].max(axis=0)
         center = 0.5 * (min_xyz + max_xyz)
         half_xyz = 0.5 * (max_xyz - min_xyz) + 0.5
-        density = 60.0
+        density = 50.0
         print('center',center)
         print('half_xyz',half_xyz)
         print('density',density)
@@ -210,7 +210,7 @@ if __name__ == '__main__':
         v_f,u_f = np.nonzero(filled_image.mean(axis=2)>100)
         output_pc = np.zeros((len(u_f), 6))
         flann = pyflann.FLANN()
-        pstack = np.empty((0,2),float)
+        pstack = []
         idx = []
         for i in range(len(u_f)):
             #X coordinate
@@ -218,19 +218,22 @@ if __name__ == '__main__':
             #Y coordinate
             if np.all(rgb_image[v_f[i],u_f[i],:]) == 0:
                 idx.append(i)
-                pstack = np.vstack((pstack, np.array([v_f[i],u_f[i]])))
+                pstack.append([v_f[i],u_f[i]])
             else:
                 output_pc[i,1] = depth_image[v_f[i], u_f[i]]
             #Z coordinate
             output_pc[i, 2] = (v_f[i] / density / bb1.half_xyz[2] - 1.0) * bb1.half_xyz[2]
             #RGB color
             output_pc[i, 3:6] = filled_image[v_f[i], u_f[i], :] 
+        pstack = np.array(pstack)
         q,_ = flann.nn(x.astype(np.int32), pstack.astype(np.int32), 1, algorithm='kdtree_simple')
         for i in range(len(idx)):
             min_v,min_u = x[q[i]]
-            output_pc[idx[i],1] = depth_image[v[min_v], u[min_u]]
+            output_pc[idx[i],1] = depth_image[min_v, min_u]
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
+        original_pc,_ = loadPLY('../%s.ply' % test_filename)
+        output_pc = np.vstack((output_pc, original_pc))
         savePLY('%s_output.ply'%test_filename, output_pc)
 
