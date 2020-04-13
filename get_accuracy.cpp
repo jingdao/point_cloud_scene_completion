@@ -238,6 +238,7 @@ int main(int argc, char* argv[]) {
     loadPLY(argv[2], &pt_points);
 
     //randomly shuffle points so that voxels can be sampled non-deterministically
+    std::srand(0);
     std::random_shuffle ( gt_points.begin(), gt_points.end() );
     std::random_shuffle ( pt_points.begin(), pt_points.end() );
 

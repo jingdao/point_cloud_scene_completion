@@ -767,6 +767,10 @@ def main():
             display_fetches["prc"] = model.prc
             display_fetches["rcl"] = model.rcl
             display_fetches["L1"] = model.L1
+            avg_prc = 0
+            avg_rcl = 0
+            avg_F1 = 0
+            avg_L1 = 0
             start = time.time()
             max_steps = min(examples.steps_per_epoch, max_steps)
             for step in range(max_steps):
@@ -774,9 +778,21 @@ def main():
                 filesets = save_images(results)
                 for i, f in enumerate(filesets):
                     print("evaluated image %s %.3f/%.3f %.3f" %(f["name"], results['prc'], results['rcl'], results['L1']))
+                    avg_prc += results['prc']
+                    avg_rcl += results['rcl']
+                    avg_L1 += results['L1']
+                    avg_F1 += 2*results['prc']*results['rcl']/(results['prc'] + results['rcl'])
 #                index_path = append_index(filesets)
 #            print("wrote index at", index_path)
+            avg_prc /= max_steps
+            avg_rcl /= max_steps
+            avg_F1 /= max_steps
+            avg_L1 /= max_steps
             print("rate", (time.time() - start) / max_steps)
+            print("avg prc", avg_prc)
+            print("avg rcl", avg_rcl)
+            print("avg F1", avg_F1)
+            print("avg L1", avg_L1)
         else:
             # training
             start = time.time()
