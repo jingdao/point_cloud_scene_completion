@@ -66,7 +66,7 @@ bool loadPLY(const char* filename, std::vector<Point> *modelVertices) {
 		}
 	}
 	fclose(f);
-	printf("Loaded %lu vertices from %s\n", modelVertices->size(), filename);
+//	printf("Loaded %lu vertices from %s\n", modelVertices->size(), filename);
 	return true;
 }
 
@@ -175,9 +175,12 @@ HPCD* HPCD_InitFromVector(std::vector<float> *float_data, std::vector<unsigned c
 		unsigned char r = cp[l++];
 		unsigned char g = cp[l++];
 		unsigned char b = cp[l++];
-		int xi = (int)((x - res->minX) / res->leafSize);
-		int yi = (int)((y - res->minY) / res->leafSize);
-		int zi = (int)((z - res->minZ) / res->leafSize);
+//		int xi = (int)((x - res->minX) / res->leafSize);
+//		int yi = (int)((y - res->minY) / res->leafSize);
+//		int zi = (int)((z - res->minZ) / res->leafSize);
+        int xi = (int)round(x / res->leafSize);
+        int yi = (int)round(y / res->leafSize);
+        int zi = (int)round(z / res->leafSize);
 		int ikey = getIntKey(xi, yi, zi);
 		int key = baseHash(res->maxSize, ikey);
 		int step = stepHash(res->maxSize, ikey);
@@ -207,8 +210,8 @@ HPCD* HPCD_InitFromVector(std::vector<float> *float_data, std::vector<unsigned c
 			}
 		}
 	}
-	printf("Processed point cloud (numPoints:%d maxSize:%d leafSize:%f)\n", res->numPoints, res->maxSize, res->leafSize);
-	printf("Bounding box: x:(%.2f %.2f) y:(%.2f %.2f) z:(%.2f %.2f)\n", res->minX, res->maxX, res->minY, res->maxY, res->minZ, res->maxZ);
+//	printf("Processed point cloud (numPoints:%d maxSize:%d leafSize:%f)\n", res->numPoints, res->maxSize, res->leafSize);
+//	printf("Bounding box: x:(%.2f %.2f) y:(%.2f %.2f) z:(%.2f %.2f)\n", res->minX, res->maxX, res->minY, res->maxY, res->minZ, res->maxZ);
 	return res;
 }
 
@@ -243,6 +246,9 @@ int main(int argc, char* argv[]) {
     std::random_shuffle ( pt_points.begin(), pt_points.end() );
 
     float resolution = 0.05;
+	bool use_default_err = true;
+	float default_pos_err = resolution * sqrt(3) * 3;
+	float default_col_err = 3;
     HPCD* gtv = HPCD_InitFromPoints(&gt_points, resolution);
     HPCD* ptv = HPCD_InitFromPoints(&pt_points, resolution);
 
@@ -269,6 +275,10 @@ int main(int argc, char* argv[]) {
             Point o = { g->x, g->y, g->z, 0,255,0 };
             output.push_back(o);
         } else {
+			if (use_default_err) {
+				position_rmse += default_pos_err;
+				color_rmse += default_col_err;
+			}
             Point o = { g->x, g->y, g->z, 0,0,255 };
             output.push_back(o);
         }
@@ -284,18 +294,24 @@ int main(int argc, char* argv[]) {
             output.push_back(o);
         }
     }
-    writePLY("tmp.ply", &output);
+//    writePLY("tmp.ply", &output);
 
-    printf("common_voxels %d\n", common_voxels);
+//    printf("common_voxels %d\n", common_voxels);
     float voxel_precision = 1.0 * common_voxels / ptv->numPoints;
     float voxel_recall = 1.0 * common_voxels / gtv->numPoints;
     float F1_score = 2*voxel_precision*voxel_recall/(voxel_precision + voxel_recall);
-    printf("voxel_precision: %.3f\n", voxel_precision);
-    printf("voxel_recall: %.3f\n", voxel_recall);
-    printf("F1_score: %.3f\n", F1_score);
+//    printf("voxel_precision: %.3f\n", voxel_precision);
+//    printf("voxel_recall: %.3f\n", voxel_recall);
+//    printf("F1_score: %.3f\n", F1_score);
 
-    position_rmse = sqrt(position_rmse / common_voxels / 3);
-    color_rmse = sqrt(color_rmse / common_voxels / 3);
-    printf("position_rmse: %.3f\n", position_rmse);
-    printf("color_rmse: %.3f\n", color_rmse);
+	if (use_default_err) {
+		position_rmse = sqrt(position_rmse / gtv->numPoints / 3);
+		color_rmse = sqrt(color_rmse / gtv->numPoints / 3);
+	} else {
+		position_rmse = sqrt(position_rmse / common_voxels / 3);
+		color_rmse = sqrt(color_rmse / common_voxels / 3);
+	}
+//    printf("position_rmse: %.3f\n", position_rmse);
+//    printf("color_rmse: %.3f\n", color_rmse);
+    printf("%.3f, %.3f, %.3f, %.3f, %.3f\n", voxel_precision, voxel_recall, F1_score, position_rmse, color_rmse);
 }
