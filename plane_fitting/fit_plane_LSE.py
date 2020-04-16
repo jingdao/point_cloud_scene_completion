@@ -64,7 +64,7 @@ def fit_plane_LSE_RANSAC(points, iters=100, inlier_thresh=0.05):
         color = np.mean(c,0)
         # points to be filled
         pts = sav[:,[0,2,1]]
-        hole = fill_holes(pts, distance=0.15, max_circumradius=0.1, max_ratio_radius_area=0.02)
+        hole = fill_holes(pts, distance=0.05, max_circumradius=0.2, max_ratio_radius_area=0.08)
         hole = hole[:,[0,2,1]]
         # add color to hole points
         hole = np.hstack((hole, np.ones(hole.shape)*color))
@@ -88,7 +88,7 @@ def fit_plane_LSE_RANSAC(points, iters=100, inlier_thresh=0.05):
 
 def main():
     filename = sys.argv[1]
-    v,f = util.loadPLY(filename)
+    v,_ = util.loadPLY(filename)
     v = np.array(v)
     for _ in range(100):
         v = fit_plane_LSE_RANSAC(v)
