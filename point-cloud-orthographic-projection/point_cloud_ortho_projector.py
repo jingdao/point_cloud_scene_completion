@@ -146,15 +146,15 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
-    convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
+    convert3Dto2D = True #True to convert 3D to 2D, False to convert 2D to 3D
     # test_filename = 'wall_with_hole'
-    test_filename = 'mason_input'
+    test_filename = '11_cod_input'
     # test_filename = 'pettit_input'
     
     if convert3Dto2D:
         ### 3D point cloud to 2D projection ###
         # load pcd point cloud
-        test_pc,_ = loadPLY('../%s.ply' % test_filename)
+        test_pc,_ = loadPLY('../input/%s.ply' % test_filename)
         #flip z axis
         test_pc[:,2] = -test_pc[:,2]
         print('loaded point cloud',test_pc.shape)
@@ -234,7 +234,7 @@ if __name__ == '__main__':
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
-        original_pc,_ = loadPLY('../%s.ply' % test_filename)
+        original_pc,_ = loadPLY('../input/%s.ply' % test_filename)
         output_pc = np.vstack((output_pc, original_pc))
         savePLY('%s_output.ply'%test_filename, output_pc)
 
