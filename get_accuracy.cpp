@@ -40,6 +40,7 @@ bool loadPLY(const char* filename, std::vector<Point> *modelVertices) {
 	FILE* f = fopen(filename, "r");
 	if (!f) {
         printf("Cannot find %s\n", filename);
+		exit(1);
 		return false;
 	}
 	char buf[256];
