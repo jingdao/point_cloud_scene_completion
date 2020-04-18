@@ -1,3 +1,5 @@
 #!/bin/bash
 rm results/images/*
-python3 pix2pix.py --mode test --output_dir results --input_dir test/ --checkpoint model 2>/dev/null
+python3 -u pix2pix.py --mode test \
+--input_dir test/ --checkpoint model \
+--output_dir results 2>/dev/null

@@ -146,7 +146,11 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
+<<<<<<< HEAD
     convert3Dto2D = True #True to convert 3D to 2D, False to convert 2D to 3D
+=======
+    convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
+>>>>>>> b9f8dc8c6a7c99be3f59833a07c951730274eed7
     # test_filename = 'wall_with_hole'
     test_filename = '11_cod_input'
     # test_filename = 'pettit_input'

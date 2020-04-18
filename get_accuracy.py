@@ -33,16 +33,17 @@ for i in range(len(predicted_points)):
     if not k in predicted_voxels:
         predicted_voxels[k] = predicted_points[i,:]
     
-print('ground_truth_points', ground_truth_points.shape, len(ground_truth_voxels), 'voxels')
-print('predicted_points', predicted_points.shape, len(predicted_voxels), 'voxels')
+#print('ground_truth_points', ground_truth_points.shape, len(ground_truth_voxels), 'voxels')
+#print('predicted_points', predicted_points.shape, len(predicted_voxels), 'voxels')
 
 common_voxels = set(ground_truth_voxels.keys()).intersection(set(predicted_voxels.keys()))
 voxel_recall = 1.0 * len(common_voxels) / len(ground_truth_voxels) if len(common_voxels)>0 else 0
 voxel_precision = 1.0 * len(common_voxels) / len(predicted_voxels) if len(common_voxels)>0 else 0
 F1_score = 2*voxel_precision*voxel_recall/(voxel_precision + voxel_recall)
-print('voxel_precision', voxel_precision)
-print('voxel_recall', voxel_recall)
-print('F1_score', F1_score)
+#print('common_voxels', len(common_voxels))
+#print('voxel_precision', voxel_precision)
+#print('voxel_recall', voxel_recall)
+#print('F1_score', F1_score)
 
 position_rmse = 0
 color_rmse = 0
@@ -53,8 +54,9 @@ for k in common_voxels:
 
 position_rmse = numpy.sqrt(position_rmse / (len(common_voxels)*3))
 color_rmse = numpy.sqrt(color_rmse / (len(common_voxels)*3))
-print('position_rmse', position_rmse)
-print('color_rmse', color_rmse)
+#print('position_rmse', position_rmse)
+#print('color_rmse', color_rmse)
 
+print('%.3f, %.3f, %.3f, %.3f, %.3f'%(voxel_precision, voxel_recall, F1_score, position_rmse, color_rmse))
 
 

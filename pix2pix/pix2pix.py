@@ -13,6 +13,7 @@ import collections
 import math
 import time
 import sys
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_dir", help="path to folder containing images")
@@ -55,8 +56,7 @@ EPS = 1e-12
 CROP_SIZE = 256
 
 Examples = collections.namedtuple("Examples", "paths, inputs, targets, count, steps_per_epoch")
-Model = collections.namedtuple("Model", "outputs, predict_real, predict_fake, discrim_loss, discrim_grads_and_vars, gen_loss_GAN, gen_loss_L1, gen_grads_and_vars, train, prc, rcl, L1")
-
+Model = collections.namedtuple("Model", "outputs, predict_real, predict_fake, discrim_loss, discrim_grads_and_vars, gen_loss_GAN, gen_loss_L1, gen_grads_and_vars, train, predict_mask, targets_mask, mask_loss, prc, rcl, L1")
 
 def preprocess(image):
     with tf.name_scope("preprocess"):
@@ -391,8 +391,13 @@ def create_generator(generator_inputs, generator_outputs_channels):
         output = tf.tanh(output)
         layers.append(output)
 
-    return layers[-1]
+    with tf.variable_scope("decoder_0"):
+        input = tf.concat([layers[-2], layers[0]], axis=3)
+        rectified = tf.nn.relu(input)
+        mask = gen_deconv(rectified, 2)
+        layers.append(mask)
 
+    return layers[-2], layers[-1]
 
 def create_model(inputs, targets):
     def create_discriminator(discrim_inputs, discrim_targets):
@@ -430,7 +435,7 @@ def create_model(inputs, targets):
 
     with tf.variable_scope("generator"):
         out_channels = int(targets.get_shape()[-1])
-        outputs = create_generator(inputs, out_channels)
+        outputs, predict_mask_logits = create_generator(inputs, out_channels)
 
     # create two copies of discriminator, one for real pairs and one for fake pairs
     # they share the same underlying variables
@@ -444,6 +449,38 @@ def create_model(inputs, targets):
             # 2x [batch, height, width, channels] => [batch, 30, 30, 1]
             predict_fake = create_discriminator(inputs, outputs)
 
+    inputs_fg = tf.reduce_any(tf.math.greater(inputs, a.background_threshold), axis=3)
+    outputs_fg = tf.reduce_any(tf.math.greater(outputs, a.background_threshold), axis=3)
+    targets_fg = tf.reduce_any(tf.math.greater(targets, a.background_threshold), axis=3)
+    targets_mask = tf.math.logical_and(targets_fg, tf.math.logical_not(inputs_fg))
+    predict_mask = tf.math.equal(tf.argmax(predict_mask_logits, axis=-1), 1)
+    predict_mask_tiled = tf.tile(tf.reshape(predict_mask, [a.batch_size, CROP_SIZE, CROP_SIZE, 1]), [1,1,1,3])
+    outputs_filtered = tf.cast(predict_mask_tiled, tf.float32) * outputs + tf.cast(tf.math.logical_not(predict_mask_tiled), tf.float32) * inputs
+
+    val_tp = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        predict_mask, 
+        targets_mask), 
+    tf.int32))
+    val_fp = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        predict_mask,
+        tf.math.logical_not(targets_mask)),
+    tf.int32))
+    val_fn = tf.reduce_sum(tf.cast(tf.math.logical_and(
+        tf.math.logical_not(predict_mask),
+        targets_mask),
+    tf.int32))
+    prc = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fp, tf.float32) + EPS)
+    rcl = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fn, tf.float32) + EPS)
+    L1 = tf.reduce_mean(tf.abs(targets - outputs))
+
+    logits_reshaped = tf.reshape(predict_mask_logits, (a.batch_size*CROP_SIZE*CROP_SIZE,2))
+    labels_reshaped = tf.cast(tf.reshape(targets_mask, [a.batch_size*CROP_SIZE*CROP_SIZE]), tf.int32)
+    pos_mask = tf.where(tf.cast(labels_reshaped, tf.bool))
+    neg_mask = tf.where(tf.cast(1 - labels_reshaped, tf.bool))
+    pos_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, pos_mask), labels=tf.gather_nd(labels_reshaped, pos_mask)))
+    neg_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, neg_mask), labels=tf.gather_nd(labels_reshaped, neg_mask)))
+    mask_loss = pos_loss + neg_loss
+
     with tf.name_scope("discriminator_loss"):
         # minimizing -tf.log will try to get inputs to 1
         # predict_real => 1
@@ -454,8 +491,15 @@ def create_model(inputs, targets):
         # predict_fake => 1
         # abs(targets - outputs) => 0
         gen_loss_GAN = tf.reduce_mean(-tf.log(predict_fake + EPS))
-        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs))
-        gen_loss = gen_loss_GAN * a.gan_weight + gen_loss_L1 * a.l1_weight
+#        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs))
+        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs_filtered))
+#        targets_foreground = tf.gather_nd(targets, tf.where(targets_mask))
+#        outputs_foreground = tf.gather_nd(outputs, tf.where(targets_mask))
+#        gen_loss_L1 = tf.reduce_mean(tf.abs(targets_foreground - outputs_foreground))
+        if a.adv_loss:
+            gen_loss = gen_loss_GAN * a.gan_weight + gen_loss_L1 * a.l1_weight
+        else:
+            gen_loss = gen_loss_L1 + mask_loss
 
     with tf.name_scope("discriminator_train"):
         discrim_tvars = [var for var in tf.trainable_variables() if var.name.startswith("discriminator")]
@@ -474,7 +518,7 @@ def create_model(inputs, targets):
         with tf.name_scope("generator_train"):
             gen_tvars = [var for var in tf.trainable_variables() if var.name.startswith("generator")]
             gen_optim = tf.train.AdamOptimizer(a.lr, a.beta1)
-            gen_grads_and_vars = gen_optim.compute_gradients(gen_loss_L1, var_list=gen_tvars)
+            gen_grads_and_vars = gen_optim.compute_gradients(gen_loss, var_list=gen_tvars)
             gen_train = gen_optim.apply_gradients(gen_grads_and_vars)
 
     ema = tf.train.ExponentialMovingAverage(decay=0.99)
@@ -482,30 +526,6 @@ def create_model(inputs, targets):
 
     global_step = tf.train.get_or_create_global_step()
     incr_global_step = tf.assign(global_step, global_step+1)
-
-    val_tp = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        tf.reduce_any(tf.math.greater(outputs, a.background_threshold), axis=3), 
-        tf.reduce_any(tf.math.greater(targets, a.background_threshold), axis=3)), 
-    tf.int32))
-    val_fp = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        tf.reduce_any(tf.math.greater(outputs, a.background_threshold), axis=3), 
-        tf.reduce_all(tf.math.less_equal(targets, a.background_threshold), axis=3)), 
-    tf.int32))
-    val_fn = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        tf.reduce_all(tf.math.less_equal(outputs, a.background_threshold), axis=3), 
-        tf.reduce_any(tf.math.greater(targets, a.background_threshold), axis=3)), 
-    tf.int32))
-    prc = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fp, tf.float32) + EPS)
-    rcl = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fn, tf.float32) + EPS)
-    L1 = tf.reduce_mean(tf.abs(targets - outputs))
-
-#    logits_reshaped = tf.reshape(logits_tf, (a.batch_size*CROP_SIZE*CROP_SIZE,2))
-#    labels_reshaped = tf.reshape(self.label_pl, [a.batch_size*CROP_SIZE*CROP_SIZE])
-#    pos_mask = tf.where(tf.cast(labels_reshaped, tf.bool))
-#    neg_mask = tf.where(tf.cast(1 - labels_reshaped, tf.bool))
-#    pos_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, pos_mask), labels=tf.gather_nd(labels_reshaped, pos_mask)))
-#    neg_loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(logits=tf.gather_nd(logits_reshaped, neg_mask), labels=tf.gather_nd(labels_reshaped, neg_mask)))
-#    mask_loss = pos_loss + neg_loss
 
     return Model(
         predict_real=predict_real,
@@ -515,8 +535,11 @@ def create_model(inputs, targets):
         gen_loss_GAN=ema.average(gen_loss_GAN),
         gen_loss_L1=ema.average(gen_loss_L1),
         gen_grads_and_vars=gen_grads_and_vars,
-        outputs=outputs,
+        outputs=outputs_filtered,
         train=tf.group(update_losses, incr_global_step, gen_train),
+        predict_mask=predict_mask,
+        targets_mask=targets_mask,
+        mask_loss=mask_loss,
         prc=prc,
         rcl=rcl,
         L1=L1
@@ -532,8 +555,8 @@ def save_images(fetches, step=None):
     for i, in_path in enumerate(fetches["paths"]):
         name, _ = os.path.splitext(os.path.basename(in_path.decode("utf8")))
         fileset = {"name": name, "step": step}
+#        for kind in ["inputs", "outputs", "targets", "predict_mask", "targets_mask"]:
         for kind in ["inputs", "outputs", "targets"]:
-#        for kind in ["outputs"]:
             filename = name + "-" + kind + ".png"
             if step is not None:
                 filename = "%08d-%s" % (step, filename)
@@ -687,6 +710,8 @@ def main():
         inputs = deprocess(examples.inputs)
         targets = deprocess(examples.targets)
         outputs = deprocess(model.outputs)
+        predict_mask = tf.reshape(tf.cast(model.predict_mask, tf.uint8)*255, [a.batch_size, CROP_SIZE, CROP_SIZE, 1])
+        targets_mask = tf.reshape(tf.cast(model.targets_mask, tf.uint8)*255, [a.batch_size, CROP_SIZE, CROP_SIZE, 1])
 
     def convert(image):
         if a.aspect_ratio != 1.0:
@@ -712,6 +737,8 @@ def main():
             "inputs": tf.map_fn(tf.image.encode_png, converted_inputs, dtype=tf.string, name="input_pngs"),
             "targets": tf.map_fn(tf.image.encode_png, converted_targets, dtype=tf.string, name="target_pngs"),
             "outputs": tf.map_fn(tf.image.encode_png, converted_outputs, dtype=tf.string, name="output_pngs"),
+            "predict_mask": tf.map_fn(tf.image.encode_png, predict_mask, dtype=tf.string, name="predict_mask_pngs"),
+            "targets_mask": tf.map_fn(tf.image.encode_png, targets_mask, dtype=tf.string, name="targets_mask_pngs"),
         }
 
     # summaries
@@ -738,7 +765,8 @@ def main():
         tf.summary.histogram(var.op.name + "/values", var)
 
     for grad, var in model.discrim_grads_and_vars + model.gen_grads_and_vars:
-        tf.summary.histogram(var.op.name + "/gradients", grad)
+        if not grad is None:
+            tf.summary.histogram(var.op.name + "/gradients", grad)
 
     with tf.name_scope("parameter_count"):
         parameter_count = tf.reduce_sum([tf.reduce_prod(tf.shape(v)) for v in tf.trainable_variables()])
@@ -781,7 +809,7 @@ def main():
                     avg_prc += results['prc']
                     avg_rcl += results['rcl']
                     avg_L1 += results['L1']
-                    avg_F1 += 2*results['prc']*results['rcl']/(results['prc'] + results['rcl'])
+                    avg_F1 += 2*results['prc']*results['rcl']/(results['prc'] + results['rcl'] + EPS)
 #                index_path = append_index(filesets)
 #            print("wrote index at", index_path)
             avg_prc /= max_steps
@@ -816,6 +844,7 @@ def main():
                     fetches["discrim_loss"] = model.discrim_loss
                     fetches["gen_loss_GAN"] = model.gen_loss_GAN
                     fetches["gen_loss_L1"] = model.gen_loss_L1
+                    fetches["mask_loss"] = model.mask_loss
                     fetches["prc"] = model.prc
                     fetches["rcl"] = model.rcl
 
@@ -850,6 +879,7 @@ def main():
                     print("discrim_loss", results["discrim_loss"])
                     print("gen_loss_GAN", results["gen_loss_GAN"])
                     print("gen_loss_L1", results["gen_loss_L1"])
+                    print("mask_loss", results["mask_loss"])
                     print("prc", results["prc"])
                     print("rcl", results["rcl"])
 
