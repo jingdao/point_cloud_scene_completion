@@ -247,7 +247,7 @@ int main(int argc, char* argv[]) {
     std::random_shuffle ( pt_points.begin(), pt_points.end() );
 
     float resolution = 0.05;
-	bool use_default_err = true;
+	bool use_default_err = false;
 	float default_pos_err = resolution * sqrt(3) * 3;
 	float default_col_err = 3;
     HPCD* gtv = HPCD_InitFromPoints(&gt_points, resolution);

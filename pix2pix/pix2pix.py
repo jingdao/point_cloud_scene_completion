@@ -47,6 +47,7 @@ parser.add_argument("--l1_weight", type=float, default=100.0, help="weight on L1
 parser.add_argument("--gan_weight", type=float, default=1.0, help="weight on GAN term for generator gradient")
 parser.add_argument("--adv_loss", action="store_true", help="use adversarial loss")
 parser.add_argument("--background_threshold", type=float, default=-0.0, help="threshold for a pixel to be considered background")
+parser.add_argument("--test_id", type=str, default="mason_north")
 
 # export options
 parser.add_argument("--output_filetype", default="png", choices=["png", "jpeg"])
@@ -257,6 +258,12 @@ def load_examples():
     else:
         input_paths = sorted(input_paths)
 
+    # filter out images depending on whether we are in train or test mode
+    if a.mode=='train':
+        input_paths = [p for p in input_paths if not a.test_id in p]
+    elif a.mode=='test':
+        input_paths = [p for p in input_paths if a.test_id in p]
+
     with tf.name_scope("load_images"):
         path_queue = tf.train.string_input_producer(input_paths, shuffle=a.mode == "train")
         reader = tf.WholeFileReader()
@@ -458,16 +465,16 @@ def create_model(inputs, targets):
     outputs_filtered = tf.cast(predict_mask_tiled, tf.float32) * outputs + tf.cast(tf.math.logical_not(predict_mask_tiled), tf.float32) * inputs
 
     val_tp = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        predict_mask, 
-        targets_mask), 
+        outputs_fg, 
+        targets_fg), 
     tf.int32))
     val_fp = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        predict_mask,
-        tf.math.logical_not(targets_mask)),
+        outputs_fg,
+        tf.math.logical_not(targets_fg)),
     tf.int32))
     val_fn = tf.reduce_sum(tf.cast(tf.math.logical_and(
-        tf.math.logical_not(predict_mask),
-        targets_mask),
+        tf.math.logical_not(outputs_fg),
+        targets_fg),
     tf.int32))
     prc = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fp, tf.float32) + EPS)
     rcl = tf.cast(val_tp,tf.float32) / (tf.cast(val_tp + val_fn, tf.float32) + EPS)
@@ -491,15 +498,15 @@ def create_model(inputs, targets):
         # predict_fake => 1
         # abs(targets - outputs) => 0
         gen_loss_GAN = tf.reduce_mean(-tf.log(predict_fake + EPS))
-#        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs))
-        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs_filtered))
+        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs))
+#        gen_loss_L1 = tf.reduce_mean(tf.abs(targets - outputs_filtered))
 #        targets_foreground = tf.gather_nd(targets, tf.where(targets_mask))
 #        outputs_foreground = tf.gather_nd(outputs, tf.where(targets_mask))
 #        gen_loss_L1 = tf.reduce_mean(tf.abs(targets_foreground - outputs_foreground))
         if a.adv_loss:
-            gen_loss = gen_loss_GAN * a.gan_weight + gen_loss_L1 * a.l1_weight
+            gen_loss = gen_loss_GAN * a.gan_weight + gen_loss_L1 * a.l1_weight + mask_loss*1e-12
         else:
-            gen_loss = gen_loss_L1 + mask_loss
+            gen_loss = gen_loss_L1 + 1e-12*mask_loss
 
     with tf.name_scope("discriminator_train"):
         discrim_tvars = [var for var in tf.trainable_variables() if var.name.startswith("discriminator")]
@@ -535,7 +542,8 @@ def create_model(inputs, targets):
         gen_loss_GAN=ema.average(gen_loss_GAN),
         gen_loss_L1=ema.average(gen_loss_L1),
         gen_grads_and_vars=gen_grads_and_vars,
-        outputs=outputs_filtered,
+#        outputs=outputs_filtered,
+        outputs=outputs,
         train=tf.group(update_losses, incr_global_step, gen_train),
         predict_mask=predict_mask,
         targets_mask=targets_mask,
@@ -684,7 +692,7 @@ def main():
         return
 
     examples = load_examples()
-    print("examples count = %d" % examples.count)
+    print("examples count = %d (test_id=%s)" % (examples.count, a.test_id))
 
     # inputs and targets are [batch_size, height, width, channels]
     model = create_model(examples.inputs, examples.targets)
@@ -775,13 +783,13 @@ def main():
 
     logdir = a.output_dir if (a.trace_freq > 0 or a.summary_freq > 0) else None
     sv = tf.train.Supervisor(logdir=logdir, save_summaries_secs=0, saver=None)
+    model_name = 'model/%s' % a.test_id
     with sv.managed_session() as sess:
         print("parameter_count =", sess.run(parameter_count))
 
         if a.checkpoint is not None:
-            checkpoint = tf.train.latest_checkpoint(a.checkpoint)
-            saver.restore(sess, checkpoint)
-            print("loaded model from checkpoint", checkpoint)
+            saver.restore(sess, model_name)
+            print("loaded model from %s" % model_name)
 
         max_steps = 2**32
         if a.max_epochs is not None:
@@ -884,8 +892,8 @@ def main():
                     print("rcl", results["rcl"])
 
                 if should(a.save_freq):
-                    print("saving model")
-                    saver.save(sess, os.path.join(a.output_dir, "model"), global_step=sv.global_step)
+                    print("saving model %s" % model_name)
+                    saver.save(sess, model_name)
 
                 if sv.should_stop():
                     break
