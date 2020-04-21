@@ -18,7 +18,6 @@ from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import cv2
 from PIL import Image
-import sys
 from load_data import PCDDataLoader
 import sys
 sys.path.append("..")
@@ -50,15 +49,15 @@ class PointCloudOrthoProjector():
         im = Image.fromarray(rgb_image_filtered)
         im.save(name+"_rgb.png")
         np.save(name+"_depth.npy", depth_image_filtered)
-        plt.figure()
-        plt.subplot(1,2,1)
-        plt.imshow(depth_image_filtered, cmap='hot', interpolation='nearest')
-        plt.colorbar()
-        plt.title('depth image')
-        plt.subplot(1,2,2)
-        plt.imshow(rgb_image_filtered)
-        plt.title('rgb image')
-        plt.show()
+#        plt.figure()
+#        plt.subplot(1,2,1)
+#        plt.imshow(depth_image_filtered, cmap='hot', interpolation='nearest')
+#        plt.colorbar()
+#        plt.title('depth image')
+#        plt.subplot(1,2,2)
+#        plt.imshow(rgb_image_filtered)
+#        plt.title('rgb image')
+#        plt.show()
 
     def apply_median_filter(self, view_image):
         #normalized value to 0 - 255
@@ -146,14 +145,8 @@ class PointCloudOrthoProjector():
 
 
 if __name__ == '__main__':
-<<<<<<< HEAD
-    convert3Dto2D = True #True to convert 3D to 2D, False to convert 2D to 3D
-=======
-    convert3Dto2D = False #True to convert 3D to 2D, False to convert 2D to 3D
->>>>>>> b9f8dc8c6a7c99be3f59833a07c951730274eed7
-    # test_filename = 'wall_with_hole'
-    test_filename = '11_cod_input'
-    # test_filename = 'pettit_input'
+    test_filename = '01_mason_east' if len(sys.argv)<2 else sys.argv[1]
+    convert3Dto2D = True if len(sys.argv)>=3 else False
     
     if convert3Dto2D:
         ### 3D point cloud to 2D projection ###
@@ -238,7 +231,7 @@ if __name__ == '__main__':
         output_pc[:,:3] += center
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
-        original_pc,_ = loadPLY('../input/%s.ply' % test_filename)
+        original_pc,_ = loadPLY('../input/%s_input.ply' % test_filename)
         output_pc = np.vstack((output_pc, original_pc))
         savePLY('%s_output.ply'%test_filename, output_pc)
 
