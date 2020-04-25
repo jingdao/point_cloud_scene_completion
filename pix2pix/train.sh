@@ -11,5 +11,5 @@ do
 	--batch_size 10 \
 	--max_epochs 100 \
 	--input_dir train/ \
-	--which_direction AtoB 2>/dev/null
+	--which_direction AtoB
 done

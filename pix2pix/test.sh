@@ -8,5 +8,5 @@ do
 	python3 -u pix2pix.py --mode test \
 	--test_id $D \
 	--input_dir test/ --checkpoint model \
-	--output_dir results 2>/dev/null
+	--output_dir results
 done
