@@ -5,7 +5,7 @@ GT=`ls $DIRNAME | grep gt_rgb256.png`
 #echo $DIRNAME
 #echo $GT
 
-for IMG in $DIRNAME/*_rgb256.png
+for IMG in `ls $DIRNAME/*_rgb256.png`
 do
     if [ "$IMG" != "$DIRNAME/$GT" ]
     then

@@ -13,8 +13,16 @@ do
     python point_cloud_ortho_projector.py "$T"
 done
 
+S=""
 for T in $TEST_SET
 do
     echo $T
-    ../get_accuracy ../input/"$T"_gt.ply "$T"_output.ply
+    R=`../get_accuracy ../input/"$T"_gt.ply "$T"_output.ply`
+    echo $R
+    S="$S$R, "
 done
+SCRIPT="import numpy
+A=[float(t) for t in raw_input().split(',')[:-1]]
+print(numpy.array(A).reshape(-1,5).mean(axis=0))"
+echo "Average"
+echo $S | python -c "$SCRIPT"

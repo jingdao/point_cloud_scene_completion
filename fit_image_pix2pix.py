@@ -12,16 +12,17 @@ for i in range(2,len(sys.argv)):
             desired_width = 256
             desired_height = 256
             im = Image.open(filename)
+            im = im.resize((desired_width,desired_height), resample=Image.NEAREST)
+            gt = Image.open(filename.replace('input', 'gt'))
+            gt = gt.resize((desired_width,desired_height), resample=Image.NEAREST)
+            im_concat = np.zeros((256, 512, 3), dtype=np.uint8)
+            im_concat[:, :256, :] = np.array(im)
+            im_concat[:, 256:, :] = np.array(gt)
+            im = Image.fromarray(im_concat)
             path, fmt = filename.split(".")
             path = path.replace('_rgb', '')
-            im = im.resize((desired_width,desired_height))
-            #concatenate 256x256 blank pixels to the right to conform to Pix2Pix format
-            im = np.array(im)
-            im_concat = np.zeros((256, 512, 3), dtype=np.uint8)
-            im_concat[:, :256, :] = im
-            im = Image.fromarray(im_concat)
-            im.save(f'../pix2pix/test/{path}_input_merged.{fmt}')
-            print(f'../pix2pix/test/{path}_input_merged.{fmt}')
+            im.save(f'../pix2pix/test/{path}_merged.{fmt}')
+            print(f'../pix2pix/test/{path}_merged.{fmt}')
         else:
             original_im = Image.open("%s_rgb.png" % filename)
             desired_width, desired_height = original_im.size
