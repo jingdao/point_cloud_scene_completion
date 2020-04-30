@@ -205,7 +205,7 @@ if __name__ == '__main__':
         #project image back to 3D point cloud
         v,u = np.nonzero(rgb_image.mean(axis=2))
         x = np.transpose((v,u)) # array of nonzero indices in rgb image (N,2)
-        v_f,u_f = np.nonzero(filled_image.mean(axis=2)>100)
+        v_f,u_f = np.nonzero(np.all(filled_image>128, axis=2))
         output_pc = np.zeros((len(u_f), 6))
         flann = pyflann.FLANN()
         pstack = []
@@ -232,6 +232,12 @@ if __name__ == '__main__':
         #flip z axis
         output_pc[:,2] = -output_pc[:,2]
         original_pc,_ = loadPLY('../input/%s_input.ply' % test_filename)
-        output_pc = np.vstack((output_pc, original_pc))
-        savePLY('%s_output.ply'%test_filename, output_pc)
+        stacked_pc = list(original_pc)
+        voxel_resolution = 0.05
+        original_voxels = set([tuple(k) for k in np.round((original_pc[:,:3] / voxel_resolution)).astype(int)])
+        added_voxels = [tuple(k) for k in np.round((output_pc[:,:3] / voxel_resolution)).astype(int)]
+        for i in range(len(added_voxels)):
+            if not added_voxels[i] in original_voxels:
+                stacked_pc.append(output_pc[i])
+        savePLY('%s_output.ply'%test_filename, stacked_pc)
 
