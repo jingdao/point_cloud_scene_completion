@@ -3,7 +3,7 @@ import h5py
 import sys
 import os
 sys.path.append('..')
-from util import loadPLY
+from util import loadPLY, savePLY
 
 TEST_SET=["01_mason_east","02_pettit","03_seb_north","04_seb_south","05_seb_west","06_seb_east","07_mason_north","08_vl_south","09_vl_circle","10_vl_east","11_cod"]
 base_path = '/home/jd/Desktop/completion3d/data/facade'
@@ -22,11 +22,12 @@ def saveH5(outfile, pc):
 	h5_fout.close()
 
 def downsample(pc):
-    partial = pc[numpy.random.choice(len(pc), 2048, replace=False), :3]
+    partial = pc[:, :3].copy()
     center = 0.5 * (partial.min(axis=0) + partial.max(axis=0))
     partial -= center
     scale = (partial.max(axis=0) - partial.min(axis=0)).max()
     partial /= scale
+    partial = partial[numpy.random.choice(len(partial), 2048, replace=False), :3]
     return partial, scale, center
 
 for T in TEST_SET:
