@@ -789,7 +789,7 @@ def main():
 
     logdir = a.output_dir if (a.trace_freq > 0 or a.summary_freq > 0) else None
     sv = tf.train.Supervisor(logdir=logdir, save_summaries_secs=0, saver=None)
-    model_name = 'model/%s' % a.test_id
+    model_name = 'model/interp10/%s' % a.test_id
     with sv.managed_session() as sess:
         print("parameter_count =", sess.run(parameter_count))
 

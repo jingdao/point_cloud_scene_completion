@@ -3,11 +3,16 @@ import os
 import subprocess
 import sys
 
-METHODS = ['input', 'hole_filling', 'meshing', 'hybrid', 'plane_fitting', 'inpainting', 'pix2pix']
+METHODS = ['input', 'hole_filling', 'meshing', 'hybrid', 'plane_fitting', 'inpainting', 'pix2pix', 'pcn', 'pcn2', 'folding', 'folding2', 'topnet', 'topnet2']
+#METHODS = ['input', 'hole_filling', 'meshing', 'hybrid', 'plane_fitting', 'inpainting', 'pix2pix', 'pcn', 'pcn2', 'folding', 'folding2']
+TEST_SET=["01_mason_east","02_pettit","03_seb_north","04_seb_south","05_seb_west","06_seb_east","07_mason_north","08_vl_south","09_vl_circle","10_vl_east","11_cod"]
+#TEST_SET=["02_pettit", "07_mason_north"]
 aggregates = []
 results = [[] for i in range(len(METHODS))]
-for l in sorted(os.listdir('input')):
-    if l.endswith('_gt.ply'):
+#for l in sorted(os.listdir('input')):
+#    if l.endswith('_gt.ply'):
+for ts in TEST_SET:
+        l = '%s_gt.ply' % ts
         T = l[:-7]
         print(T)
         GT = 'input/' + l
@@ -17,10 +22,18 @@ for l in sorted(os.listdir('input')):
         HYBRID = 'baselines/hybrid/' + T + '_input_hole_filled_mesh.ply'
         PLANE_FITTING = 'baselines/plane_fitting/' + T + '_plane_fitted.ply'
         INPAINT = 'baselines/inpainting/' + T + '_inpainted.ply'
-#        PIX2PIX = 'point-cloud-orthographic-projection/' + T + '_output.ply'
-        PIX2PIX = 'baselines/pix2pix/' + T + '_output.ply'
-        for j,TARGET in enumerate([INPUT, HOLE_FILLING, MESHING, HYBRID, PLANE_FITTING, INPAINT, PIX2PIX]):
-            s = subprocess.check_output(['./get_accuracy', GT, TARGET])
+        PIX2PIX = 'point-cloud-orthographic-projection/' + T + '_output.ply'
+#        PIX2PIX = 'baselines/pix2pix/' + T + '_output.ply'
+#        PCN = '../pcn/tmp_fix/' + T + '.ply'
+        PCN = 'baselines/PCN/' + T + '.ply'
+        PCN2 = 'baselines/PCN_upsampled/' + T + '.ply'
+        FOLDING = 'baselines/Folding/' + T + '.ply'
+        FOLDING2 = 'baselines/Folding_upsampled/' + T + '.ply'
+        TOPNET = 'baselines/TopNet/' + T + '.ply'
+        TOPNET2 = 'baselines/TopNet_upsampled/' + T + '.ply'
+        for j,TARGET in enumerate([INPUT, HOLE_FILLING, MESHING, HYBRID, PLANE_FITTING, INPAINT, PIX2PIX, PCN, PCN2, FOLDING, FOLDING2, TOPNET, TOPNET2]):
+#        for j,TARGET in enumerate([INPUT, HOLE_FILLING, MESHING, HYBRID, PLANE_FITTING, INPAINT, PIX2PIX, PCN, PCN2, FOLDING, FOLDING2]):
+            s = subprocess.check_output(['./get_accuracy', GT, TARGET, '0.05'])
             if not isinstance(s, str):
                 s = s.decode('utf-8')
             print(s.strip())

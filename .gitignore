@@ -4,3 +4,6 @@
 .DS_Store
 *.ply
 *.pcd
+point-cloud-orthographic-projection/*.npy
+point-cloud-orthographic-projection/*.txt
+point-cloud-orthographic-projection/*.png

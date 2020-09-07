@@ -8,6 +8,7 @@ from util import loadPLY, savePLY
 TEST_SET=["01_mason_east","02_pettit","03_seb_north","04_seb_south","05_seb_west","06_seb_east","07_mason_north","08_vl_south","09_vl_circle","10_vl_east","11_cod"]
 base_path = '/home/jd/Desktop/completion3d/data/facade'
 
+num_pts = 131072
 total_train = 0
 train_list = []
 val_list = []
@@ -27,7 +28,7 @@ def downsample(pc):
     partial -= center
     scale = (partial.max(axis=0) - partial.min(axis=0)).max()
     partial /= scale
-    partial = partial[numpy.random.choice(len(partial), 2048, replace=False), :3]
+    partial = partial[numpy.random.choice(len(partial), num_pts, replace=len(partial)<num_pts), :3]
     return partial, scale, center
 
 for T in TEST_SET:
@@ -70,6 +71,7 @@ for T in TEST_SET:
         train_list.append('%s/%s' % (sceneID, t.replace('.ply', '')))
         saveH5(train_partial_folder + t.replace('ply', 'h5'), p)
         saveH5(train_gt_folder + t.replace('ply','h5'), gt)
+#    break
 
 f = open('%s/train.list' % base_path, 'w')
 for s in train_list:
