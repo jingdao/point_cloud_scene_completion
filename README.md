@@ -56,6 +56,13 @@ python fit_plane_LSE.py input_file.ply
 
 ### Partial Convolutions
 
+1. Run the Python file `point_cloud_ortho_projector.py` to generate a RGB image and a depth image for the input point cloud file.
+2. Use the Python file `fit_image.py` to resize the RGB image to 512x512 pixels.
+3. Upload the RGB image at this [site](https://www.nvidia.com/research/inpainting/).
+4. Manually draw the mask and perform inpainting.
+5. Download the resulting image and resize it back to the original size using the Python file `recover_image.py`.
+6. Run the Python file `point_cloud_ortho_projector.py` again to generate a PLY point cloud from the filled RGB image and the previously saved depth image.
+
 ### PCN/FoldingNet/TopNet
 
 Refer to [this](https://github.com/jingdao/completion3d) fork of the Completion3D baselines for
@@ -82,6 +89,8 @@ python getAccuracy.py ground_truth.ply input.ply
 This will display the evaluation metrics.
 
 ## Results
+
+![results](results/inpainting_result.png?raw=true)
 
 ## Third-party Code
 
