@@ -28,9 +28,12 @@ DOI = {10.3390/s20185029}
 ## Data preparation
 
 Ground truth and input files:
-[input/ground truth files.zip]()
+[input/groundtruth](https://www.dropbox.com/s/kef3ouplemqy0co/input%20and%20ground%20truth.zip?dl=0)
 
 After unzipping the file there will be an input folder containing all the input files, and a ground truth folder containing all the ground truth files. These files are point clouds stored as PLY files. 
+
+## Dependencies
+Training is implemented with [TensorFlow](https://www.tensorflow.org/). This code has been tested under TF1.3 on Ubuntu 18.04.
 
 ## Baselines
 ### Hole-filling
