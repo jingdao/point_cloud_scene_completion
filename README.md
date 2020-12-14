@@ -28,7 +28,7 @@ DOI = {10.3390/s20185029}
 ## Data preparation
 
 Ground truth and input files:
-[input/groundtruth](https://www.dropbox.com/s/kef3ouplemqy0co/input%20and%20ground%20truth.zip?dl=0)
+[input/groundtruth](https://www.dropbox.com/s/w16uog65u7flfp3/input_and_ground_truth.zip?dl=1)
 
 After unzipping the file there will be an input folder containing all the input files, and a ground truth folder containing all the ground truth files. These files are point clouds stored as PLY files. 
 
@@ -77,7 +77,7 @@ Our proposed method for Generative Adversarial Inpainting is built on top of the
 Follow the steps below:
 
 1. Create the "train" and "test" subfolders in the "pix2pix" folder by downloading the following image files from Dropbox:
-[train](https://www.dropbox.com/s/iv3kgdvihxpz521/train.zip?dl=0) [test](https://www.dropbox.com/s/v07vi2kyu5j1yj9/test.zip?dl=0)
+[train](https://www.dropbox.com/s/rfzvjpxg51o7lx5/train.zip?dl=1) [test](https://www.dropbox.com/s/a293qyuyiclw0sg/test.zip?dl=1)
 2. Run the training script `pix2pix/train.sh`. Once done, it should save 11 models in total to the "model" folder
 3. Run the script `point-cloud-orthographic-projection/prepare_pix2pix_data.sh`. The script will call the Python file `point_cloud_ortho_projector.py` to generate a RGB image and a depth image for each input point cloud file.
 Note that the Python file uses Python 2 and the dependencies need to be installed.
